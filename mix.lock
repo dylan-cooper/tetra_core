@@ -1,1 +1,1 @@
-%{"exirc": {:hex, :exirc, "0.11.0", "8d4adab6f7ab9e07d9c9f171ef05ed891357ea2de68604b9705217e526090b25", [:mix], []}}
+%{"exirc": {:git, "git://github.com/dylan-cooper/exirc.git", "3b8073e04fbf0f2f06d1d9d7594bc6b35f848988", []}}

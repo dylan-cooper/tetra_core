@@ -5,6 +5,7 @@ defmodule TetraCore.Mixfile do
     [app: :tetra_core,
      version: "0.0.1",
      elixir: "~> 1.2",
+     escript: [main_module: CLI],
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
      deps: deps]
@@ -14,7 +15,7 @@ defmodule TetraCore.Mixfile do
   #
   # Type "mix help compile.app" for more information
   def application do
-    [applications: [:logger, :exirc]]
+    [applications: [:logger, :exirc], mod: {TetraCore, []}]
   end
 
   # Dependencies can be Hex packages:
@@ -27,6 +28,6 @@ defmodule TetraCore.Mixfile do
   #
   # Type "mix help deps" for more examples and options
   defp deps do
-    [{:exirc, "~> 0.11.0"}]
+    [{:exirc, git: "git://github.com/dylan-cooper/exirc.git"}]
   end
 end
