@@ -1,48 +1,84 @@
-defmodule TetraCore.Board do
+defmodule TetraCore.TetraGame do
   use GenServer
 
-  def start_link do
-    GenServer.start_link(__MODULE__, :ok, [])
+  defmodule State do
+    defstruct player1: nil, #subscriber pid
+              player2: nil, #subscriber pid
+              grid: nil,
+              prev: nil,
+              winner: nil
   end
 
-  def drop(pid, player, column) do
-    GenServer.call(pid, {:drop, player, column})
+  def start_link(player1, player2) do
+    GenServer.start_link(__MODULE__, [player1, player2])
   end
 
-  def get_grid(pid) do
-    GenServer.call(pid, :get_grid)
+  def drop_piece(game, column) do
+    GenServer.call(game, {:drop_piece, column})
   end
 
-  def handle_call({:drop, player, column}, _from, state) do
-    try do
-      new_state = state
-        |> drop_piece(player, column, 0)
-        |> check_winner(player)
-
-      case new_state.winner do
-        nil -> {:reply, :ok, new_state}
-        _winner -> {:reply, :win, new_state}
-      end 
-    rescue
-      e in RuntimeError ->
-        {:reply, {:error, e.message}, state}
-    end
+  def get_grid(game) do
+    GenServer.call(game, :get_grid)
   end
 
-  def handle_call(:get_grid, _from, state) do
-    {:reply, state.grid, state}
-  end
-
-  def init(:ok) do
+  def init([player1, player2]) do
     init_grid =
       for x <- 0 .. 6,
           y <- 0 .. 5,
           into: %{},
           do: {{x,y}, %{player: nil}}
 
-    init_state = %{grid: init_grid, prev: nil, winner: nil}
+    init_state = %State{
+      player1: player1,
+      player2: player2,
+      grid: init_grid,
+      prev: nil,
+      winner: nil
+    }
     
     {:ok, init_state}
+  end
+
+  def handle_call({:drop_piece, column}, {from_pid, _}, state) do
+    IO.puts "In game, was asked to drop piece for player"
+    IO.inspect state
+    IO.inspect from_pid
+
+    get_player(from_pid, state) |> do_drop_piece(column, state)
+  end
+
+  def handle_call(:get_grid, _from, state) do
+    {:reply, state.grid, state}
+  end
+
+  #Internal API
+
+  def get_player(pid, %{player1: pid}), do: :player1
+  def get_player(pid, %{player2: pid}), do: :player2
+
+  def get_opponent_pid(:player1, state), do: state.player2
+  def get_opponent_pid(:player2, state), do: state.player1
+
+  def do_drop_piece(player, column, state) do
+    try do
+      new_state = state
+        |> drop_piece(player, column, 0)
+        |> check_winner(player)
+
+      opponent = get_opponent_pid(player, new_state)
+
+      case new_state.winner do
+        nil -> 
+          Kernel.send(opponent, {:opponent_moved, column})
+          {:reply, :ok, new_state}
+        _winner ->
+          Kernel.send(opponent, {:opponent_won, column})
+          {:reply, :win, new_state}
+      end 
+    rescue
+      e in RuntimeError ->
+        {:reply, {:error, e.message}, state}
+    end
   end
 
   defp drop_piece(state = %{grid: grid}, player, column, row) do
@@ -57,7 +93,7 @@ defmodule TetraCore.Board do
         drop_piece(state, player, column, row + 1)
     end
   end
-
+  
   defp check_winner(state, player) do
     if did_win(state) do
       %{state | winner: player}

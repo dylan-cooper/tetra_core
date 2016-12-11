@@ -85,7 +85,7 @@ defmodule TetraIRC.ChallengeHandler do
   end
 
   #send an OPEN_CHALLENGE to the IRC chat
-  def handle_cast({:open_challenge, challenge = {client, channel, challenge_id, pid}}, state) do
+  def handle_cast({:open_challenge, challenge = {client, channel, challenge_id, _pid}}, state) do
     msg = "OPEN_CHALLENGE:V1:" <> challenge_id
     ExIrc.Client.msg(client, :privmsg, channel, msg)
     my_open_challenges = state.my_open_challenges ++ [challenge]
@@ -103,24 +103,23 @@ defmodule TetraIRC.ChallengeHandler do
 
   #receive an OPEN_CHALLENGE from the IRC chat
   def handle_info(%{msg: {:received, "OPEN_CHALLENGE:V1:" <> challenge_id, %{nick: challenger}, channel}, pid: client}, state) do
-
-    IO.puts challenger <> " sent V1 challenge in " <> channel <> " from:"
-    IO.inspect client
+    #IO.puts challenger <> " sent V1 challenge in " <> channel <> " from:"
+    #IO.inspect client
     open_challenges = state.open_challenges ++ [{client, channel, challenge_id, challenger}]
     {:noreply, %{state | open_challenges: open_challenges}}
   end
 
   #receive an ACCEPT_CHALLENGE from the IRC chat
   def handle_info(%{msg: {:received, "ACCEPT_CHALLENGE:" <> challenge_id, %{nick: acceptor}, channel}, pid: client}, state) do
-    IO.puts acceptor <> " accepted challenge with ID: " <> challenge_id <> " in " <> channel <> " from:"
-    IO.inspect client
+    #IO.puts acceptor <> " accepted challenge with ID: " <> challenge_id <> " in " <> channel <> " from:"
+    #IO.inspect client
     
     if (state.my_open_challenges |> Enum.any?(fn {a, b, c, _} -> {a, b, c} == {client, channel, challenge_id} end)) do
       #the challenge_id matches a challenge opened by tetrabot
 
       #send message to the pid associated
       {_, _, _, pid} = Enum.find(state.my_open_challenges, fn {a, b, c, _} -> {a, b, c} == {client, channel, challenge_id} end)
-      IO.inspect pid
+      #IO.inspect pid
       Kernel.send(pid, {:found_acceptor, {client, channel, challenge_id, acceptor}})
 
       #remove from my_open_challenges
@@ -140,8 +139,8 @@ defmodule TetraIRC.ChallengeHandler do
 
   #received a cancel challenge from the IRC chat
   def handle_info(%{msg: {:received, "CANCEL_CHALLENGE:" <> challenge_id, %{nick: canceller}, channel}, pid: client}, state) do
-    IO.puts canceller <> " is cancelling a challenge with ID: " <> challenge_id <> " in " <> channel <> " from:"
-    IO.inspect client
+    #IO.puts canceller <> " is cancelling a challenge with ID: " <> challenge_id <> " in " <> channel <> " from:"
+    #IO.inspect client
 
     open_challenges = state.open_challenges
       |> Enum.filter(fn {a, b, c, d} -> {a, b, c, d} != {client, channel, challenge_id, canceller} end)

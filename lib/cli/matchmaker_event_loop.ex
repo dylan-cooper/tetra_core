@@ -5,7 +5,9 @@ defmodule CLI.MatchmakerEventLoop do
               another_thing: nil
   end
 
-  def start(_args, state \\ %State{}) do
+  def start(_args) do
+
+    state = %State{}
     event_loop(state)
   end
 
@@ -29,7 +31,7 @@ defmodule CLI.MatchmakerEventLoop do
       l ->
         print_challenge({nil, "Channel", "ID", "Name"})
 
-        String.duplicate "-", 60 |> IO.puts
+        String.duplicate("-", 60) |> IO.puts
 
         l |> Enum.each(fn c -> c |> print_challenge end)
     end
@@ -47,8 +49,8 @@ defmodule CLI.MatchmakerEventLoop do
   def respond_to_input(["accept", challenge_id], state) do
     result = TetraIRC.ChallengeHandler.accept_challenge challenge_id
     case result do
-      {:ok, msg} ->
-        {:ok, msg}
+      {:ok, {client, channel, nick}} ->
+        {:ok, {client, channel, nick, challenge_id}}
       {:challenge_id_not_found, _} ->
         IO.puts "Did not find a challenge with that ID"
         event_loop(state)
@@ -78,10 +80,10 @@ defmodule CLI.MatchmakerEventLoop do
   defp wait_for_acceptor(n \\ 0) do
     chars = "|/-\\"
     receive do
-      {:found_acceptor, {client, channel, _challenge_id, nick}} ->
+      {:found_acceptor, {client, channel, challenge_id, nick}} ->
         IO.write "\b\n"
         IO.puts "The challenge was accepted by: " <> nick
-        {:ok, {client, channel, nick}}
+        {:ok, {client, channel, nick, challenge_id}}
       msg ->
         IO.puts :stderr, "Unexpected message"
         IO.inspect msg

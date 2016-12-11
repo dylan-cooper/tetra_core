@@ -3,12 +3,13 @@ defmodule TetraCore.GameSupervisor do
   import Supervisor.Spec
 
   def start_game(player1, player2) do
-    Supervisor.start_child(:game_supervisor, [%{player1: player1, player2: player2}])
+    Supervisor.start_child(:game_supervisor, [player1, player2])
   end
 
   def init(_) do
     children = [
-      supervisor(TetraCore.Game, [], restart: :temporary)
+      worker(TetraCore.TetraGame, [], restart: :temporary)
+      #supervisor(TetraCore.Game, [], restart: :temporary)
     ]
 
     supervise children, strategy: :simple_one_for_one

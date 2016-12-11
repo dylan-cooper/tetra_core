@@ -1,1 +1,2 @@
-%{"exirc": {:git, "git://github.com/dylan-cooper/exirc.git", "3b8073e04fbf0f2f06d1d9d7594bc6b35f848988", []}}
+%{"bunt": {:hex, :bunt, "0.1.6", "5d95a6882f73f3b9969fdfd1953798046664e6f77ec4e486e6fafc7caad97c6f", [:mix], []},
+  "exirc": {:git, "git://github.com/dylan-cooper/exirc.git", "3b8073e04fbf0f2f06d1d9d7594bc6b35f848988", []}}

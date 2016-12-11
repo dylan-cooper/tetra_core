@@ -1,5 +1,6 @@
 defmodule CLI.ConnectingEventLoop do
-  def start(_, connection_details \\ %IRCConnectionDetails{}) do
+  def start(_args) do
+    connection_details = %IRCConnectionDetails{}
     TetraIRC.ConnectionHandlerSupervisor.start_irc_connection(connection_details, self)
     IO.write "Connecting to " <> connection_details.host <> ": "
     result = wait_for_connection_complete

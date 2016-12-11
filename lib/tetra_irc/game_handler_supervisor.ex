@@ -2,10 +2,8 @@ defmodule TetraIRC.GameHandlerSupervisor do
   use Supervisor
   import Supervisor.Spec
 
-  def start_game_handler(client, channel, opponent) do
-    {:ok, pid} = Supervisor.start_child(:gh_super, [client])
-    GenServer.cast(pid, {:set_channel_and_opponent, channel, opponent})
-    {:ok, pid}
+  def start_game_handler(client, channel, opponent, game_key) do
+    Supervisor.start_child(:gh_super, [client, channel, opponent, game_key])
   end
 
   def init(_) do
