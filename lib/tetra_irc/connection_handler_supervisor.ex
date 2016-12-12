@@ -4,12 +4,12 @@ defmodule TetraIRC.ConnectionHandlerSupervisor do
 
   def start_irc_connection(connection_details) do
     {:ok, client} = ExIrc.start_client!
-    {:ok, pid} = Supervisor.start_child(:irc_connection_supervisor, [client, connection_details])
+    Supervisor.start_child(:irc_connection_supervisor, [client, connection_details])
   end
 
   def start_irc_connection(connection_details, subscriber) do
     {:ok, client} = ExIrc.start_client!
-    {:ok, pid} = Supervisor.start_child(:irc_connection_supervisor, [client, connection_details, subscriber])
+    Supervisor.start_child(:irc_connection_supervisor, [client, connection_details, subscriber])
   end
   
   def init(_) do

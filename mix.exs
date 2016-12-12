@@ -15,7 +15,7 @@ defmodule TetraCore.Mixfile do
   #
   # Type "mix help compile.app" for more information
   def application do
-    [applications: [:logger, :bunt, :exirc], mod: {TetraCore, []}]
+    [applications: [:logger, :exirc], mod: {TetraCore, []}]
   end
 
   # Dependencies can be Hex packages:

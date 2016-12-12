@@ -5,6 +5,10 @@ defmodule CLI.MatchmakerEventLoop do
               another_thing: nil
   end
 
+  def start(:bot) do
+    :bot
+  end
+
   def start(_args) do
 
     state = %State{}
@@ -20,26 +24,18 @@ defmodule CLI.MatchmakerEventLoop do
   end
 
   def respond_to_input(["quit"], _state) do
-    :ok
+    :quit
   end
 
   def respond_to_input(["check"], state) do
-    challenges = TetraIRC.ChallengeHandler.get_all_open_challenges
-    case challenges do
-      [] ->
-        IO.puts "No challenges currently open."
-      l ->
-        print_challenge({nil, "Channel", "ID", "Name"})
+    TetraIRC.ChallengeHandler.get_all_open_challenges
+      |> display_challenges
 
-        String.duplicate("-", 60) |> IO.puts
-
-        l |> Enum.each(fn c -> c |> print_challenge end)
-    end
     event_loop(state)
   end
 
   def respond_to_input(["open", channel, challenge_id], _state) do
-    IO.puts "Should open a challenge in channel: " <> channel <> " with id: " <> challenge_id
+    IO.puts "Opening a challenge with id: " <> challenge_id
     [client | _] = TetraIRC.ChallengeHandler.get_clients
     TetraIRC.ChallengeHandler.open_challenge_async(client, channel, challenge_id, self)
     IO.write "Waiting for someone to accept this challenge: "
@@ -50,7 +46,7 @@ defmodule CLI.MatchmakerEventLoop do
     result = TetraIRC.ChallengeHandler.accept_challenge challenge_id
     case result do
       {:ok, {client, channel, nick}} ->
-        {:ok, {client, channel, nick, challenge_id}}
+        {:ok, {client, channel, nick, challenge_id, false}}
       {:challenge_id_not_found, _} ->
         IO.puts "Did not find a challenge with that ID"
         event_loop(state)
@@ -70,20 +66,13 @@ defmodule CLI.MatchmakerEventLoop do
     event_loop(state)
   end
 
-  defp print_challenge ({_, channel, id, name}) do
-    IO.write String.pad_trailing(name, 20)
-    IO.write String.pad_trailing(id, 20)
-    IO.write String.pad_trailing(channel, 20)
-    IO.write "\n"
-  end
-
   defp wait_for_acceptor(n \\ 0) do
     chars = "|/-\\"
     receive do
       {:found_acceptor, {client, channel, challenge_id, nick}} ->
         IO.write "\b\n"
         IO.puts "The challenge was accepted by: " <> nick
-        {:ok, {client, channel, nick, challenge_id}}
+        {:ok, {client, channel, nick, challenge_id, true}}
       msg ->
         IO.puts :stderr, "Unexpected message"
         IO.inspect msg
@@ -93,5 +82,22 @@ defmodule CLI.MatchmakerEventLoop do
         IO.write "\b" <> String.at(chars, n)
         rem(n + 1, 4) |> wait_for_acceptor
     end
+  end
+
+  defp display_challenges([]) do
+    IO.puts "No challenges currently open."
+  end
+
+  defp display_challenges(challenges) do
+    display_challenge({nil, "Channel", "ID", "Name"})
+    String.duplicate("-", 60) |> IO.puts
+    challenges |> Enum.each(fn c -> c |> display_challenge end)
+  end
+
+  defp display_challenge ({_, channel, id, name}) do
+    IO.write String.pad_trailing(name, 20)
+    IO.write String.pad_trailing(id, 20)
+    IO.write String.pad_trailing(channel, 20)
+    IO.write "\n"
   end
 end

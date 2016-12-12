@@ -29,7 +29,7 @@ defmodule TetraIRC.ConnectionHandler do
     {:reply, result, state}
   end
 
-  def handle_info(info = {:connected, _server, _port}, state) do
+  def handle_info({:connected, _server, _port}, state) do
     GenServer.call(:challenge_handler, {:add_client, state.client})
     ExIrc.Client.logon state.client, state.connection_details.pass, state.connection_details.nick, state.connection_details.user, state.connection_details.name
     {:noreply, state}
@@ -43,6 +43,10 @@ defmodule TetraIRC.ConnectionHandler do
 
   def handle_info(_msg, state) do
     {:noreply, state}
+  end
+
+  def terminate(_reason, state) do
+    ExIrc.Client.quit state.client
   end
 
   defp inform_subscriber(%{subscriber: subscriber}) do

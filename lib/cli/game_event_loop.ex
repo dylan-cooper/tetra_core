@@ -4,22 +4,31 @@ defmodule CLI.GameEventLoop do
     defstruct game: nil
   end
 
-  def start({:ok, {client, channel, nick, game_key}}) do
-    #Use match to start a game and initialize state
-
-    IO.puts "About to call start_game_handler"
-    {:ok, irc_handler} = TetraIRC.GameHandlerSupervisor.start_game_handler(client, channel, nick, game_key)
-
-    IO.ANSI.green()
-    IO.puts "About to call start_game"
-    IO.ANSI.default_color()
-    {:ok, game} = TetraCore.GameSupervisor.start_game(irc_handler, self)
-
-    TetraIRC.GameHandler.set_game(irc_handler, game)
-
+  def start(:bot) do
+    {:ok, bot} = TetraCore.TetraBot.start_link()
+    {:ok, game} = TetraCore.GameSupervisor.start_game(self, bot)
+    TetraCore.TetraBot.set_game(bot, game)
     state = %State{game: game}
     event_loop(state)
   end
+
+  def start({:ok, {client, channel, nick, game_key, true}}) do
+    {:ok, irc_handler} = TetraIRC.GameHandlerSupervisor.start_game_handler(client, channel, nick, game_key)
+    {:ok, game} = TetraCore.GameSupervisor.start_game(self, irc_handler)
+    TetraIRC.GameHandler.set_game(irc_handler, game)
+    state = %State{game: game}
+    event_loop(state)
+  end
+
+  def start({:ok, {client, channel, nick, game_key, false}}) do
+    {:ok, irc_handler} = TetraIRC.GameHandlerSupervisor.start_game_handler(client, channel, nick, game_key)
+    {:ok, game} = TetraCore.GameSupervisor.start_game(irc_handler, self)
+    TetraIRC.GameHandler.set_game(irc_handler, game)
+    state = %State{game: game}
+    wait_for_next_turn(state)
+  end
+
+  def start(:quit), do: :quit
 
   def event_loop(state) do
     input = IO.gets "Tetra > "
@@ -30,47 +39,111 @@ defmodule CLI.GameEventLoop do
   end
 
   def respond_to_input(["quit"], _state) do
-    :ok
+    :quit
   end
 
   def respond_to_input(["drop", column], state) do
-    IO.puts "Should drop piece in " <> column
-    {column_n, ""}  = Integer.parse(column)
-    reply = TetraCore.TetraGame.drop_piece(state.game, column_n)
-
-    case reply do
-      :ok ->
-        IO.puts "Told this was okay in event loop"
-      :win ->
-        IO.puts "Ooh, you won!"
-      {:error, _message} ->
-        IO.puts "Told there was an error in event loop"
+    case Integer.parse(column) do
+      {column_n, ""} ->
+        do_drop(column_n, state)
+      _ ->
+        IO.puts "That column isn't valid."
+        event_loop(state)
     end
-    event_loop(state)
   end
 
   def respond_to_input(["display"], state) do
-    IO.puts "Should display the board"
-    state.game
-      |> TetraCore.TetraGame.get_grid    
-      |> display_grid
+    display_board(state)
 
     event_loop(state)
   end
 
   def respond_to_input(["chat", message], state) do
-    IO.puts "Would send chat message " <> message
+    TetraCore.Game.send_chat(state.game, message)
     event_loop(state)
   end
 
   def respond_to_input(["help"], state) do
-    IO.puts "Should display help menu"
+    IO.puts "chat <message> - Send a message to the opponent"
+    IO.puts "drop <column> - Drop a piece in a given column (columns go from 0 to 6)"
+    IO.puts "display - Display the current board"
+    IO.puts "quit - Quit the program"
     event_loop(state)
   end
 
   def respond_to_input(_, state) do
     IO.puts "Undefined command.  To review commands, use the help command"
     event_loop(state)
+  end
+
+  def do_drop(column, state) do
+    reply = TetraCore.Game.drop_piece(state.game, column)
+
+    case reply do
+      :ok ->
+        display_board(state)
+        wait_for_next_turn(state)
+      :tie ->
+        display_board(state)
+        IO.puts "The game ended in a tie!"
+        :ok
+      :win ->
+        display_board(state)
+        IO.puts "Congratulations, you won!"
+        :ok
+      :not_your_turn ->
+        IO.puts "Don't know how this happened, but it's not your turn!"
+        wait_for_next_turn(state)
+      {:error, _message} ->
+        IO.puts "That column isn't valid."
+        event_loop(state)
+    end
+  end
+
+  defp wait_for_next_turn(state) do
+    CLI.Helpers.wait_for(
+      "Waiting for the opponent to make a move",
+      fn
+        {:opponent_moved, _} -> true
+        {:opponent_won, _} -> true
+        {:opponent_tied, _} -> true
+        {:opponent_resigned, _} -> true
+        _ -> false
+      end,
+      fn
+        {:opponent_moved, column} ->
+          IO.write "\n"
+          IO.puts "Your opponent dropped a tile in column " <> Integer.to_string(column)
+          display_board(state)
+          event_loop(state)
+        {:opponent_tied, column} ->
+          IO.write "\n"
+          IO.puts "Your opponent dropped a tile in column " <> Integer.to_string(column)
+          display_board(state)
+          IO.puts "The game is over, it was a tie!"
+          :ok
+        {:opponent_won, column} ->
+          IO.write "\n"
+          IO.puts "Your opponent dropped a tile in column " <> Integer.to_string(column)
+          display_board(state)
+          IO.puts "Your opponent has won the game!"
+          :ok
+        {:opponent_sent_chat, message} ->
+          IO.puts "\nMessage from opponent: " <> message
+          IO.write "Waiting for the opponent to make a move: |"
+        {:opponent_resigned, message} ->
+          IO.puts "\nYour opponent has resigned: " <> message
+          :ok
+        msg ->
+          IO.inspect :stderr, msg
+      end
+    )
+  end
+
+  defp display_board(state) do
+    state.game
+      |> TetraCore.Game.get_grid    
+      |> display_grid
   end
 
   defp display_grid(grid) do
