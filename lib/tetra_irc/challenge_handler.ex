@@ -33,6 +33,10 @@ defmodule TetraIRC.ChallengeHandler do
     GenServer.call(:challenge_handler, :all_open_challenges)
   end
 
+  def get_any_open_challenge do
+    GenServer.call(:challenge_handler, :any_open_challenge)
+  end
+
   def accept_challenge(challenge_id) do
     GenServer.call(:challenge_handler, {:accept_challenge, {challenge_id}})
   end
@@ -66,6 +70,11 @@ defmodule TetraIRC.ChallengeHandler do
     {:reply, result, state}
   end
 
+  def handle_call(:any_open_challenge, _from, state) do
+    result = Enum.at(state.open_challenges, 0, :no_open_challenges)
+    {:reply, result, state}
+  end
+
   #send an ACCEPT_CHALLENGE to the IRC chat
   def handle_call({:accept_challenge, {challenge_id}}, _from, state) do
     msg = "ACCEPT_CHALLENGE:" <> challenge_id
@@ -85,10 +94,8 @@ defmodule TetraIRC.ChallengeHandler do
   end
 
   #send an OPEN_CHALLENGE to the IRC chat
-  def handle_cast({:open_challenge, challenge = {client, channel, challenge_id, _pid}}, state) do
-    msg = "OPEN_CHALLENGE:V1:" <> challenge_id
-    ExIrc.Client.msg(client, :privmsg, channel, msg)
-    my_open_challenges = state.my_open_challenges ++ [challenge]
+  def handle_cast({:open_challenge, challenge}, state) do
+    my_open_challenges = do_open_challenge(challenge, state)
     {:noreply, %{state | my_open_challenges: my_open_challenges}}
   end
 
@@ -104,6 +111,7 @@ defmodule TetraIRC.ChallengeHandler do
   #receive an OPEN_CHALLENGE from the IRC chat
   def handle_info(%{msg: {:received, "OPEN_CHALLENGE:V1:" <> challenge_id, %{nick: challenger}, channel}, pid: client}, state) do
     open_challenges = state.open_challenges ++ [{client, channel, challenge_id, challenger}]
+      |> Enum.uniq
     {:noreply, %{state | open_challenges: open_challenges}}
   end
 
@@ -139,8 +147,36 @@ defmodule TetraIRC.ChallengeHandler do
     {:noreply, %{state | open_challenges: open_challenges}}
   end
 
+  def handle_info(%{msg: {:quit, _, %{nick: quitter}}, pid: client}, state) do
+    open_challenges = state.open_challenges
+      |> Enum.filter(fn {a, _, _, b} -> {a, b} != {client, quitter} end)
+
+    {:noreply, %{state | open_challenges: open_challenges}}
+  end
+
+  def handle_info(%{msg: {:parted, channel, %{nick: leaver}}, pid: client}, state) do
+    open_challenges = state.open_challenges
+      |> Enum.filter(fn {a, b, _, c} -> {a, b, c} != {client, channel, leaver} end)
+
+    {:noreply, %{state | open_challenges: open_challenges}}
+  end
+
+  def handle_info(%{msg: {:joined, channel, %{nick: _joiner}}, pid: client}, state) do
+    state.my_open_challenges
+      |> Enum.filter(fn {a, b, _, _} -> {a, b} == {client, channel} end)
+      |> Enum.map(&do_open_challenge(&1, state))
+
+    {:noreply, state}
+  end
 
   def handle_info(_msg, state) do
     {:noreply, state}
+  end
+
+  defp do_open_challenge(challenge = {client, channel, challenge_id, _pid}, state) do
+    msg = "OPEN_CHALLENGE:V1:" <> challenge_id
+    ExIrc.Client.msg(client, :privmsg, channel, msg)
+    state.my_open_challenges ++ [challenge]
+      |> Enum.uniq
   end
 end

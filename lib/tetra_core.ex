@@ -11,7 +11,6 @@ defmodule TetraCore do
     children = [
       supervisor(TetraIRC, []),
       supervisor(TetraCore.GameSupervisor, []),
-      worker(TetraCore.Matchmaker, [:matchmaker]),
     ]
 
     opts = [strategy: :one_for_one]

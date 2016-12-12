@@ -42,6 +42,10 @@ defmodule CLI.MatchmakerEventLoop do
     wait_for_acceptor
   end
 
+  def respond_to_input(["open", channel], state) do
+    respond_to_input(["open", channel, to_string(:os.system_time(:seconds))], state)
+  end
+
   def respond_to_input(["accept", challenge_id], state) do
     result = TetraIRC.ChallengeHandler.accept_challenge challenge_id
     case result do
@@ -53,10 +57,22 @@ defmodule CLI.MatchmakerEventLoop do
     end
   end
 
+  def respond_to_input(["accept"], state) do
+    case TetraIRC.ChallengeHandler.get_any_open_challenge do
+      :no_open_challenges ->
+        IO.puts "Did not find any open challenges"
+        event_loop(state)
+      {_, _, challenge_id, _} ->
+        respond_to_input(["accept", challenge_id], state)
+    end
+  end
+
   def respond_to_input(["help"], state) do
     IO.puts "accept <challenge_id> - Accept the challenge"
+    IO.puts "accept - Accept any open challenge"
     IO.puts "check - Check challenges that are currently open"
-    IO.puts "open <channel> <challenge_id> - Open a new challenge in a given channel"
+    IO.puts "open <channel> <challenge_id> - Open a new challenge in specified channel"
+    IO.puts "open <channel> - Open a new challenge in specified channel with generated key"
     IO.puts "quit - Quit the program"
     event_loop(state)
   end

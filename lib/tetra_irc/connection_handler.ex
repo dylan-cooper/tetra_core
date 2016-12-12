@@ -42,6 +42,7 @@ defmodule TetraIRC.ConnectionHandler do
   end
 
   def handle_info(_msg, state) do
+    #IO.inspect msg
     {:noreply, state}
   end
 

@@ -35,6 +35,10 @@ defmodule TetraCore.Game do
     GenServer.call(game, {:resign, message})
   end
 
+  def find_best_move(game) do
+    GenServer.call(game, :find_best_move)
+  end
+
   def init([player1, player2]) do
     init_grid =
       for x <- 0 .. 6,
@@ -89,6 +93,11 @@ defmodule TetraCore.Game do
     {:reply, :ok, state}
   end
 
+  def handle_call(:find_best_move, _from, state) do
+    column = do_find_best_move(state)
+    {:reply, column, state}
+  end
+
   #Internal API
 
   def get_player(pid, %{player1: pid}), do: :player1
@@ -107,36 +116,48 @@ defmodule TetraCore.Game do
 
     %{state | full: result}
   end
+
   #kind of gross function, should fix later
   def do_drop_piece(player, column, state = %{turn: player}) do
-    try do
-      new_state = state
-        |> insert_piece(player, column, 0)
-        |> check_winner(player)
-        |> change_turn
-        |> check_full
-
-      opponent_pid = get_opponent_pid(player, new_state)
-      
-      case {new_state.winner, new_state.full} do
-        {nil, false} -> 
-          Kernel.send(opponent_pid, {:opponent_moved, column})
-          {:reply, :ok, new_state}
-        {nil, true} ->
-          Kernel.send(opponent_pid, {:opponent_tied, column})
-          {:reply, :tie, new_state}
-        {_winner, _} ->
-          Kernel.send(opponent_pid, {:opponent_won, column})
-          {:reply, :win, new_state}
-      end 
-    rescue
-      e in RuntimeError ->
-        {:reply, {:error, e.message}, state}
-    end
+      case perform_drop_piece(player, column, state) do
+        {:error, msg} ->
+          {:reply, {:error, msg}, state}
+        new_state ->
+          opponent_pid = get_opponent_pid(player, new_state)
+          
+          case {new_state.winner, new_state.full} do
+            {nil, false} -> 
+              Kernel.send(opponent_pid, {:opponent_moved, column})
+              {:reply, :ok, new_state}
+            {nil, true} ->
+              Kernel.send(opponent_pid, {:opponent_tied, column})
+              {:reply, :tie, new_state}
+            {_winner, _} ->
+              Kernel.send(opponent_pid, {:opponent_won, column})
+              {:reply, :win, new_state}
+          end 
+      end
   end
 
   def do_drop_piece(_player, _column, state) do
     {:reply, :not_your_turn, state}
+  end
+
+  def try_drop_piece(player, column, state) do
+    state
+      |> insert_piece(player, column, 0)
+      |> check_winner(player)
+      |> change_turn
+      |> check_full
+  end
+
+  def perform_drop_piece(player, column, state) do
+    try do
+      try_drop_piece(player, column, state)
+    rescue
+      e in RuntimeError ->
+        {:error, e.message}
+    end
   end
 
   defp insert_piece(state = %{grid: grid}, player, column, row) do
@@ -192,4 +213,91 @@ defmodule TetraCore.Game do
 
     Map.get(grid, coord_forwards) == player || Map.get(grid, coord_backwards) == player
   end
+
+  defp do_find_best_move(state) do
+    {:found, column} = find_winning_move(:not_found, state)
+      |> find_stopping_move(state)
+      |> find_center_move(state)
+      |> find_edge_move(state)
+      |> find_corner_move(state)
+
+    column
+  end
+
+  defp find_winning_move(:not_found, state) do
+    list = Enum.map(0..6, fn n -> perform_drop_piece(state.turn, n, state) end)
+    l = for %State{} = s<- list, do: s
+    l
+      |> Enum.filter(fn s -> did_win(s) end)
+      |> Enum.map(fn %{prev: {x, _y}} -> x end)
+      |> case do
+        [] -> :not_found
+        columns -> {:found, Enum.random(columns)}
+      end
+  end
+
+  defp find_stopping_move(:not_found, state) do
+    player = case state.turn do 
+      :player1 -> :player2
+      :player2 -> :player1
+    end
+
+    list = Enum.map(0..6, fn n -> perform_drop_piece(player, n, state) end)
+
+    l = for %State{} = s <- list, do: s
+
+    l
+      |> Enum.filter(fn s -> did_win(s) end)
+      |> Enum.map(fn %{prev: {x, _y}} -> x end)
+      |> case do
+        [] -> :not_found
+        columns -> {:found, Enum.random(columns)}
+      end
+  end
+  
+  defp find_stopping_move(val, _state), do: val
+
+  defp find_center_move(:not_found, state) do
+    list = Enum.map(1..5, fn n -> perform_drop_piece(state.turn, n, state) end)
+
+    l = for %State{} = s <- list, do: s
+    l
+      |> Enum.filter(fn %{prev: {_x, y}} -> y != 5 end)
+      |> Enum.map(fn %{prev: {x, _y}} -> x end)
+      |> case do
+        [] -> :not_found
+        columns -> {:found, Enum.random(columns)}
+      end
+  end
+
+  defp find_center_move(val, _state), do: val
+
+  defp find_edge_move(:not_found, state) do
+    list = Enum.map(0..6, fn n -> perform_drop_piece(state.turn, n, state) end)
+
+    l = for %State{} = s <- list, do: s
+    l
+      |> Enum.filter(fn %{prev: {x, y}} -> {x, y} != {0, 0} and {x, y} != {0, 5} and {x, y} != {6, 0} and {x, y} != {6, 5} end)
+      |> Enum.map(fn %{prev: {x, _y}} -> x end)
+      |> case do
+        [] -> :not_found
+        columns -> {:found, Enum.random(columns)}
+      end
+  end
+
+  defp find_edge_move(val, _state), do: val
+
+  defp find_corner_move(:not_found, state) do
+    list = Enum.map(0..6, fn n -> perform_drop_piece(state.turn, n, state) end)
+
+    l = for %State{} = s <- list, do: s
+    l
+      |> Enum.map(fn %{prev: {x, _y}} -> x end)
+      |> case do
+        [] -> :not_found
+        columns -> {:found, Enum.random(columns)}
+      end
+  end
+
+  defp find_corner_move(val, _state), do: val
 end

@@ -38,6 +38,16 @@ defmodule TetraIRC.GameHandler do
     {:noreply, state}
   end
 
+  def handle_info({:quit, _, %{nick: quitter}}, state = %{opponent_nick: quitter}) do
+    resign(state)
+    {:noreply, state}
+  end
+
+  def handle_info({:parter, channel, %{nick: leaver}}, state = %{channel: channel, opponent_nick: leaver}) do
+    resign(state)
+    {:noreply, state}
+  end
+
   def handle_info({:opponent_moved, column}, state) do
     send_irc_message("PLAY:" <> state.game_key <> ":" <> Integer.to_string(column), state)
     {:noreply, state}
@@ -98,11 +108,11 @@ defmodule TetraIRC.GameHandler do
   end
 
   def respond_to_message(["RESIGN", game_key, msg], state = %{game_key: game_key}) do
-    opponent_resigned(msg, state)
+    resign(msg, state)
   end
 
   def respond_to_message(["QUIT", game_key, msg], state = %{game_key: game_key}) do
-    opponent_resigned(msg, state)
+    resign(msg, state)
   end
 
   def respond_to_message(_, _) do
@@ -133,8 +143,9 @@ defmodule TetraIRC.GameHandler do
     send_irc_message("CHEAT:" <> state.game_key <> ":INVALID_COLUMN", state)
   end
 
-  def opponent_resigned(msg \\ "", _state) do
-    IO.puts "Opponent has decided to resign: " <> msg 
+  def resign(msg \\ "", state) do
+    TetraCore.Game.resign(state.game_pid, msg)
+    #IO.puts "Opponent has decided to resign: " <> msg 
   end
 
   defp send_irc_message(msg, state) do

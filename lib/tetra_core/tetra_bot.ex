@@ -23,10 +23,11 @@ defmodule TetraCore.TetraBot do
   end
 
   def handle_info({:opponent_moved, _column}, state) do
-    random_column = get_valid_columns(state.game_pid)
-      |> Enum.random
+    column = find_best_move(state.game_pid)
+    #column = get_valid_columns(state.game_pid)
+    #  |> Enum.random
 
-    drop_piece(state.game_pid, random_column)
+    drop_piece(state.game_pid, column)
       |> respond_to_drop(state)
     {:noreply, state}
   end
